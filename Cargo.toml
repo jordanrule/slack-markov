@@ -2,7 +2,7 @@
 name = "slack-markov"
 version = "0.1.0"
 authors = ["jordanrule <jordanrule@gmail.com"]
-edition = "2022"
+edition = "2021"
 publish = true
 description = "A markov chain bot for Slack"
 readme = "README.md"
