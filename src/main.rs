@@ -1,5 +1,9 @@
 mod lib;
+use env_logger;
+use log::{info, error};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use serde_json;
 use tiny_http::{Server, Response};
 
 
@@ -14,7 +18,21 @@ const PORT: &str = "8000";
 const BOT_NAME: &str = "athena";
 const RESPONSE_CHANCE: i32 = 5;
 
+#[derive(Deserialize, Debug)]
+struct SlackRequest {
+	text: String,
+	user_id: String,
+}
+
+#[derive(Serialize, Debug)]
+#[allow(non_snake_case)]
+struct SlackResponse {
+	Text: String,
+	Username: String,
+}
+
 fn main() {
+	env_logger::init();
 	let address = format!("{}:{}", IP, PORT);
 	let server = Server::http(address).unwrap();
 	let mut content = String::new();
@@ -22,25 +40,32 @@ fn main() {
 	loop {
 		let mut request = match server.recv() {
 			Ok(rq) => rq,
-			Err(e) => { println!("error: {}", e); break }
+			Err(e) => { error!("Error: {}", e); break }
 		};
 
-		let mut input = String::new();
-		request.as_reader().read_to_string(&mut input).unwrap();
+		let mut body = String::new();
+    	request.as_reader().read_to_string(&mut body).unwrap();
+    	let slack_request: SlackRequest = serde_json::from_str(&body).unwrap();
 
-		if input != "" {
+		let mut input = slack_request.text;
+		let name = slack_request.user_id;
+
+		if input != "" && name != "" {
+			info!("Handling incoming request: {}", input);
+
 			input = input.replace("@", "");
 			input = input.replace("#", "");
 			content.push_str(" ");
 			content.push_str(&input);
-		}
 
-		let mut rng = rand::thread_rng();
-		let chance = rng.gen_range(0..100);
-		if (chance < RESPONSE_CHANCE) || input.starts_with(BOT_NAME) {
-			let chain = lib::generate_chain(content.clone());
-			let response = Response::from_string(chain);
-			let _ = request.respond(response);
+			let mut rng = rand::thread_rng();
+			let chance = rng.gen_range(0..100);
+			if (chance < RESPONSE_CHANCE) || input.starts_with(BOT_NAME) {
+				let chain = lib::generate_chain(content.clone());
+				let slack_response = SlackResponse { Text: chain, Username: BOT_NAME.to_string() };
+				let response = serde_json::to_string(&slack_response).unwrap();
+				let _ = request.respond(Response::from_string(response));
+			}
 		}
 	}
 }
