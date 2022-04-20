@@ -13,22 +13,15 @@ use tiny_http::{Server, Response};
 // Create an outgoing webhook in your Slack here:
 // https://my.slack.com/services/new/outgoing-webhook
 
-const IP: &str = "127.0.0.1";
+const IP: &str = "192.168.86.82";
 const PORT: &str = "8000";
 const BOT_NAME: &str = "athena";
 const RESPONSE_CHANCE: i32 = 5;
 
-#[derive(Deserialize, Debug)]
-struct SlackRequest {
+#[derive(Deserialize, Serialize)]
+struct Message {
 	text: String,
 	user_id: String,
-}
-
-#[derive(Serialize, Debug)]
-#[allow(non_snake_case)]
-struct SlackResponse {
-	Text: String,
-	Username: String,
 }
 
 fn main() {
@@ -37,6 +30,7 @@ fn main() {
 	let server = Server::http(address).unwrap();
 	let mut content = String::new();
 
+	// TODO: multi-thread server
 	loop {
 		let mut request = match server.recv() {
 			Ok(rq) => rq,
@@ -45,9 +39,10 @@ fn main() {
 
 		let mut body = String::new();
     	request.as_reader().read_to_string(&mut body).unwrap();
-    	let slack_request: SlackRequest = serde_json::from_str(&body).unwrap();
+    	let json = format!("{{\"{}\"}}", body.replace("=", r#"":""#).replace("&", r#"", ""#));
+    	let slack_request: Message = serde_json::from_str(&json).unwrap();
 
-		let mut input = slack_request.text;
+		let mut input = slack_request.text.replace("+", " ");
 		let name = slack_request.user_id;
 
 		if input != "" && name != "" {
@@ -55,6 +50,7 @@ fn main() {
 
 			input = input.replace("@", "");
 			input = input.replace("#", "");
+			// TODO: trim content length after concatenation exceeds a limit
 			content.push_str(" ");
 			content.push_str(&input);
 
@@ -62,7 +58,8 @@ fn main() {
 			let chance = rng.gen_range(0..100);
 			if (chance < RESPONSE_CHANCE) || input.starts_with(BOT_NAME) {
 				let chain = lib::generate_chain(content.clone());
-				let slack_response = SlackResponse { Text: chain, Username: BOT_NAME.to_string() };
+				// TODO: decode UTF-8 to plain text
+				let slack_response = Message { text: chain, user_id: BOT_NAME.to_string() };
 				let response = serde_json::to_string(&slack_response).unwrap();
 				let _ = request.respond(Response::from_string(response));
 			}
